@@ -21,6 +21,7 @@ library(tidyverse)
 library(corrplot)
 library(reshape2)
 library(ggthemes)
+library(ggfortify)
 ```
 
 ```{r}
@@ -119,6 +120,70 @@ ggplot(aes(value, TARGET), data = mlt.train) + geom_jitter(width = 0.5, height =
 * The pH of most of the wine samples are also low, between 2 and 5.
 
 
+
+# Build Models
+
+### Full multiple linear regression model
+```{r}
+mod1 <- lm(TARGET ~ ., data=select(wine.train, -"INDEX"))
+summary(mod1)
+```
+44% of the variability observed in the number of sales is explained by the model.
+
+
+### Multiple regression with manually selected features
+We choose the highly significant variables as outputted by the previous model:
+
+* VolatileAcidity
+* Sulphates
+* Alcohol
+* LabelAppeal
+* AcidIndex
+* STARS
+```{r}
+mod2 <- lm(TARGET ~ VolatileAcidity + Sulphates + Alcohol + LabelAppeal + AcidIndex + STARS, data=wine.train)
+summary(mod2)
+```
+
+The Adjusted $R^{2}$ is hardly better.
+
+```{r}
+mod2 %>%  glance()
+```
+
+
+### Evaluation
+
+Multicollinearity is when independent variables are correlated. Variance Inflation (VIF) is a metric that can be used to determine multicollinearity between variables in a model. A score over 5 is considered severe, and the variable would not be as statistically significant. If there is a problem with multicollinearity, one solution is to carefully trim the model by removing some of the offending variables.
+
+Variance Inflation for Model 1
+```{r}
+car::vif(mod1)
+```
+
+Variance Inflation for Model 2
+```{r}
+car::vif(mod2)
+```
+In each model, the scores are very close to 1, which is good.
+
+### Visualize Model Fit for the Linear Models
+
+Model 1
+```{r}
+autoplot(mod1)
+```
+
+
+Model 2
+```{r}
+autoplot(mod2)
+```
+
+
+Despite the decent VIF metrics, there is overall evidence that a mulitple linear regression is not the right fit for this data.
+
+### Poisson Model
 
 
 
