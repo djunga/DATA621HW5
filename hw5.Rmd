@@ -1,0 +1,122 @@
+---
+title: "HW5"
+author: "Group 4"
+date: '2022-11-21'
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F, warning = F, message = F)
+```
+
+# Background
+Given a set of metrics describing the quality of different wines, can we predict the number of sales of each wine? Since the target is a count response variable, we will build models appropriate for count regression. After evaluating our set of models, we will select the best one and predict the number of sales in a wine data set the model has not yet seen.
+
+# Data Exploration
+
+```{r, echo=FALSE}
+library(tidyverse)
+library(corrplot)
+library(reshape2)
+```
+
+```{r}
+wine.train <- read.csv('https://raw.githubusercontent.com/djunga/DATA621HW5/main/wine-training-data.csv')
+wine.eval <- read.csv('https://raw.githubusercontent.com/djunga/DATA621HW5/main/wine-evaluation-data.csv')
+```
+
+### Description of variables
+```{r}
+summary(wine.train)
+```
+
+```{r}
+str(wine.train)
+```
+
+
+
+* There are 12,795 observations and 16 columns.
+* Of these columns, 14 are predictors.
+* Of the remaining 2, there is an index column with invalid characters, so it will need to be renamed. The column with the response variable is named `TARGET`.
+* `TARGET`, the response variable, is the number of sample cases of wine that were purchased by wine distribution companies after sampling a wine.
+* Aside from `STARS` and `LabelAppeal`  The predictors are mostly chemical metrics of the wines.
+* Values in `STARS` are ratings given to the wines by experts whereas values in `LabelAppeal` are marketing scores indicate the level of visual appeal of the wine label to customers. Note that`LabelAppeal` is not a score given by customers themselves, but by marketing tools that have used other sources to make assumptions.
+* The target has a small range, 0-8. This indicates that fewer than 10 of each wine has been sold.
+
+
+```{r}
+# Should we convert STARS to a factor?
+
+# * `STARS` is discrete. It ranges from 4 Stars = Excellent to 1 Star = Poor. We can make it categorical.
+# wine.train$STARS[is.na(wine.train$STARS)] <- 0      # Replace missing STARS with 0
+# wine.train[,'STARS'] <- as.factor(wine.train[,'STARS'])      # Convert STARS to factor with 5 levels (include missing values)
+```
+
+### Missing values
+
+```{r}
+(colSums(is.na(wine.train)) / nrow(wine.train)) * 100
+
+```
+
+Over 25% of the wines don't have a value for `STARS`, meaning they have not been rated by experts. What is the relationship between lack of a rating and number of sales? 
+
+```{r}
+#missing_val <- data.frame(num_missing=colSums(is.na(wine.train)))
+
+#ggplot(wine.train, aes(STARS, TARGET)) + geom_jitter(width=0.5, height=0.5)
+```
+
+
+### Correlation plot
+```{r}
+colnames(wine.train)[1] <- "INDEX"
+corrplot(cor(select(wine.train, -"INDEX"), use = "complete.obs"), tl.col="black", tl.cex=0.6, order='AOE')
+```
+
+* There is a positive correlation between `STARS` `LabelAppeal`, and `TARGET`. This makes sense because the better a wine label appears, the more likely a customer will buy the wine. And if an expert rates a wine highly, it is indicative that other people will like it is as well and decide to buy it.
+* There is a slight negative correlation between `AcidIndex` and `TARGET`, and it is interesting that this does not appear to be the case for `pH` and `TARGET`. Since pH is also a metric for acidity, we might have expected a relationship to exist.
+
+### Distribution of variables
+
+```{r, fig.height= 10, fig.width = 14}
+mlt.train <- melt(wine.train, id.vars = c("INDEX", "TARGET"))
+
+ggplot(aes(value, TARGET), data = mlt.train) + geom_point() + facet_wrap(~variable, scales = "free") + labs(title = "Distributions of Continuous Variables", x = "Variable", y = "TARGET") 
+```
+
+For the `AcidIndex`, `STARS`, and `LabelAppeal` predictors, due to the small range of both them and the target variable, it may be easier to see their relationships if the data is jittered. Also, is there a differene between `pH` and `AcidIndex`?
+
+
+```{r, fig.width = 7}
+# ggplot(wine.train, aes(AcidIndex, TARGET)) +
+#   geom_jitter(width = 0.5, height = 0.5)
+
+mlt.train <- melt(select(wine.train, "pH", "AcidIndex", "LabelAppeal", "STARS", "TARGET"), id.vars = c("TARGET"))
+
+ggplot(aes(value, TARGET), data = mlt.train) + geom_jitter(width = 0.5, height = 0.5) + facet_wrap(~variable, scales = "free") + labs(title = "Distributions of Continuous Variables Subset", x = "Variable", y = "TARGET") 
+```
+
+
+* There is a clear positive relationship between `LabelAppeal`, `STARS`, and `TARGET`.
+* The `AcidIndex` plot reveals that most of the wines have a lower total acidity, between 5 and 10.
+* The pH of most of the wine samples are also low, between 2 and 5.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
