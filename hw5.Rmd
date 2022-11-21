@@ -187,7 +187,7 @@ Despite the decent VIF metrics, there is overall evidence that a mulitple linear
 ## Poisson Model 1 with all predictors
 
 ```{r}
-pois_Model1<- glm(TARGET ~ FixedAcidity + VolatileAcidity + CitricAcid + ResidualSugar + 
+Poisson_Model1<- glm(TARGET ~ FixedAcidity + VolatileAcidity + CitricAcid + ResidualSugar + 
               Chlorides + FreeSulfurDioxide + TotalSulfurDioxide + Density +
               pH + Sulphates + Alcohol + 
               as.factor(LabelAppeal) +
@@ -196,7 +196,7 @@ pois_Model1<- glm(TARGET ~ FixedAcidity + VolatileAcidity + CitricAcid + Residua
               data=wine.train, 
               family=poisson
             )
-summary(pois_Model1)
+summary(Poisson_Model1)
 ```
 
 # Evaluation Poisson Model 1 
