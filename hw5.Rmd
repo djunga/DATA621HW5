@@ -20,6 +20,7 @@ Given a set of metrics describing the quality of different wines, can we predict
 library(tidyverse)
 library(corrplot)
 library(reshape2)
+library(ggthemes)
 ```
 
 ```{r}
@@ -45,6 +46,18 @@ str(wine.train)
 * Aside from `STARS` and `LabelAppeal`  The predictors are mostly chemical metrics of the wines.
 * Values in `STARS` are ratings given to the wines by experts whereas values in `LabelAppeal` are marketing scores indicate the level of visual appeal of the wine label to customers. Note that`LabelAppeal` is not a score given by customers themselves, but by marketing tools that have used other sources to make assumptions.
 * The target has a small range, 0-8. This indicates that fewer than 10 of each wine has been sold.
+
+
+```{r}
+dummydf <- wine.train
+dummydf$STARS[is.na(dummydf$STARS)] <- 0      # Replace missing STARS with 0
+dummydf[,'STARS'] <- as.factor(dummydf[,'STARS'])      # Convert STARS to factor with 5 levels (include missing values)
+ggplot(data = dummydf, mapping = aes(x = TARGET)) + 
+  geom_freqpoly(mapping = aes(colour = STARS), binwidth = 1) + 
+  theme_minimal() +
+  ggtitle("Num. of Sales vs. Experts' Ratings")
+```
+
 
 
 ```{r}
