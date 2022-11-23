@@ -1,0 +1,364 @@
+---
+title: "HW5"
+author: "Group 4"
+date: '2022-11-21'
+output:
+  pdf_document: default
+  html_document: default
+---
+
+
+# Background
+Given a set of metrics describing the quality of different wines, can we predict the number of sales of each wine? Since the target is a count response variable, we will build models appropriate for count regression. After evaluating our set of models, we will select the best one and predict the number of sales in a wine data set the model has not yet seen.
+
+# Data Exploration
+
+
+```{r, echo=FALSE}
+library(corrplot)
+library(reshape2)
+library(MASS)
+library(tidyverse)
+library(ggplot2)
+library(ggthemes)
+library(corrplot)
+library(reshape2)
+library(knitr)
+library(broom)
+library(caret)
+library(leaps)
+library(MASS)
+library(magrittr)
+library(betareg)
+library(pscl)
+library(gtsummary)
+library(nnet)
+library(arm)
+library(AER)
+#install.packages("kableExtra", repo="http://cran.r-project.org", dep=T)
+library(kableExtra)
+
+
+```
+
+
+```{r}
+wine.train <- read.csv('https://raw.githubusercontent.com/djunga/DATA621HW5/main/wine-training-data.csv')
+wine.eval <- read.csv('https://raw.githubusercontent.com/djunga/DATA621HW5/main/wine-evaluation-data.csv')
+```
+
+### Description of variables
+```{r}
+summary(wine.train)
+```
+
+```{r}
+str(wine.train)
+```
+
+
+
+* There are 12,795 observations and 16 
+* Of these columns, 14 are predictors.
+* Of the remaining 2, there is an index column with invalid characters, so it will need to be renamed. The column with the response variable is named `TARGET`.
+* `TARGET`, the response variable, is the number of sample cases of wine that were purchased by wine distribution companies after sampling a wine.
+* Aside from `STARS` and `LabelAppeal`  The predictors are mostly chemical metrics of the wines.columns.
+* Values in `STARS` are ratings given to the wines by experts whereas values in `LabelAppeal` are marketing scores indicate the level of visual appeal of the wine label to customers. Note that`LabelAppeal` is not a score given by customers themselves, but by marketing tools that have used other sources to make assumptions.
+* The target has a small range, 0-8. This indicates that fewer than 10 of each wine has been sold.
+
+
+```{r}
+# Should we convert STARS to a factor?
+# * `STARS` is discrete. It ranges from 4 Stars = Excellent to 1 Star = Poor. We can make it categorical.
+ #wine.train$STARS[is.na(wine.train$STARS)] <- 0      # Replace missing STARS with 0
+ #wine.train[,'STARS'] <- as.factor(wine.train[,'STARS'])      # Convert STARS to factor with 5 levels (include missing values)
+```
+
+### Missing values
+
+```{r}
+(colSums(is.na(wine.train)) / nrow(wine.train)) * 100
+```
+
+Over 25% of the wines don't have a value for `STARS`, meaning they have not been rated by experts. What is the relationship between lack of a rating and number of sales? 
+
+```{r}
+missing_val <- data.frame(num_missing=colSums(is.na(wine.train)))
+ggplot(wine.train, aes(STARS, TARGET)) + geom_jitter(width=0.5, height=0.5)
+```
+
+
+### Correlation plot
+
+```{r}
+#colnames(wine.train)[1] <- "INDEX"
+#corrplot(cor(select(wine.train, -"INDEX"), use = "complete.obs"), tl.col="black", tl.cex=0.6, order='AOE')
+```
+
+
+* There is a positive correlation between `STARS` `LabelAppeal`, and `TARGET`. This makes sense because the better a wine label appears, the more likely a customer will buy the wine. And if an expert rates a wine highly, it is indicative that other people will like it is as well and decide to buy it.
+* There is a slight negative correlation between `AcidIndex` and `TARGET`, and it is interesting that this does not appear to be the case for `pH` and `TARGET`. Since pH is also a metric for acidity, we might have expected a relationship to exist.
+
+### Distribution of variables
+
+```{r, fig.height= 10, fig.width = 14}
+mlt.train <- melt(wine.train, id.vars = c("INDEX", "TARGET"))
+ggplot(aes(value, TARGET), data = mlt.train) + geom_point() + facet_wrap(~variable, scales = "free") + labs(title = "Distributions of Continuous Variables", x = "Variable", y = "TARGET") 
+```
+
+For the `AcidIndex`, `STARS`, and `LabelAppeal` predictors, due to the small range of both them and the target variable, it may be easier to see their relationships if the data is jittered. Also, is there a differene between `pH` and `AcidIndex`?
+
+
+```{r, fig.width = 7}
+# ggplot(wine.train, aes(AcidIndex, TARGET)) +
+#   geom_jitter(width = 0.5, height = 0.5)
+mlt.train <- melt(select(wine.train, "pH", "AcidIndex", "LabelAppeal", "STARS", "TARGET"), id.vars = c("TARGET"))
+ggplot(aes(value, TARGET), data = mlt.train) + geom_jitter(width = 0.5, height = 0.5) + facet_wrap(~variable, scales = "free") + labs(title = "Distributions of Continuous Variables Subset", x = "Variable", y = "TARGET") 
+```
+
+
+* There is a clear positive relationship between `LabelAppeal`, `STARS`, and `TARGET`.
+* The `AcidIndex` plot reveals that most of the wines have a lower total acidity, between 5 and 10.
+* The pH of most of the wine samples are also low, between 2 and 5.
+
+``
+
+# Build Models
+
+### Full multiple linear regression model
+```{r}
+mod1 <- lm(TARGET ~ ., data=select(wine.train, -"INDEX"))
+summary(mod1)
+```
+44% of the variability observed in the number of sales is explained by the model.
+
+
+### Multiple regression with manually selected features
+We choose the highly significant variables as outputted by the previous model:
+
+* VolatileAcidity
+* Sulphates
+* Alcohol
+* LabelAppeal
+* AcidIndex
+* STARS
+```{r}
+mod2 <- lm(TARGET ~ VolatileAcidity + Sulphates + Alcohol + LabelAppeal + AcidIndex + STARS, data=wine.train)
+summary(mod2)
+```
+
+The Adjusted $R^{2}$ is hardly better.
+
+```{r}
+mod2 %>%glance()
+```
+
+### Evaluation
+
+Multicollinearity is when independent variables are correlated. Variance Inflation (VIF) is a metric that can be used to determine multicollinearity between variables in a model. A score over 5 is considered severe, and the variable would not be as statistically significant. If there is a problem with multicollinearity, one solution is to carefully trim the model by removing some of the offending variables.
+
+
+Variance Inflation for Model 1
+```{r}
+car::vif(mod1)
+```
+
+Variance Inflation for Model 2
+```{r}
+car::vif(mod2)
+```
+In each model, the scores are very close to 1, which is good.
+
+### Visualize Model Fit for the Linear Models
+
+Model 1
+```{r}
+#install.packages("ggfortify")
+library(ggfortify)
+autoplot(mod1)
+```
+
+
+##Model 2
+
+```{r}
+autoplot(mod2)
+```
+
+Despite the decent VIF metrics, there is overall evidence that a mulitple linear regression is not the right fit for this data.
+
+## Poisson Model 1 with all predictor
+
+```{r}
+Poisson_Model1<- glm(TARGET ~ FixedAcidity + VolatileAcidity + CitricAcid + ResidualSugar + 
+              Chlorides + FreeSulfurDioxide + TotalSulfurDioxide + Density +
+              pH + Sulphates + Alcohol + 
+              as.factor(LabelAppeal) +
+              as.factor(AcidIndex) +
+              as.factor(STARS),
+              data=wine.train, 
+              family=poisson
+            )
+summary(Poisson_Model1)
+
+```
+### Test Dispersion on Poisson Model 1
+
+```{r}
+#Test Dispersion from AER package
+dispersiontest(Poisson_Model1, trafo = 1)
+```
+Since the p value is 1, meaning this is not Over-dispersion Which is good.
+
+
+## Poisson Model 2 with selected predictors
+We choose the highly significant variables as outputted by Poisson Model 1:
+
+* VolatileAcidity
+* Chlorides
+* FreeSulfurDioxide
+* TotalSulfurDioxide
+* Sulphates
+* Alcohol
+* LabelAppeal
+* AcidIndex
+* STARS
+
+
+```{r}
+Poisson_Model2 <- glm(TARGET ~ VolatileAcidity + Chlorides + FreeSulfurDioxide + TotalSulfurDioxide + Sulphates +Alcohol + 
+              as.factor(LabelAppeal) + 
+              as.factor(AcidIndex) + 
+              as.factor(STARS),
+              data=wine.train, 
+              family=poisson
+             )
+summary(Poisson_Model2)
+```
+
+The deviance residuals increases than before with increase degrees of freedom.
+Furthermore, the AIC score increased significantly from 23087 to 24948. So we can say Poisson Model 1 is better fit than Model2.
+ 
+Since the residual deviance is smaller than the degrees of freedom, then our data is under-dispersion.
+
+
+### Test Dispersion on Poisson Model 2
+
+```{r}
+dispersiontest(Poisson_Model2, trafo = 1)
+```
+Since the p value is exactly 1, meaning this is not Over-dispersion Which is good.
+
+
+## Negative Binomial Model 1 with all predictors
+
+```{r}
+Negative_Bin_Model1 <- glm.nb(TARGET ~ FixedAcidity + VolatileAcidity + CitricAcid + ResidualSugar + 
+                Chlorides + FreeSulfurDioxide + TotalSulfurDioxide + Density +
+                pH + Sulphates + Alcohol + 
+                as.factor(LabelAppeal) +
+                as.factor(AcidIndex) +
+                as.factor(STARS),
+              data=wine.train)
+summary(Negative_Bin_Model1)
+```
+
+## Negative Binomial Model 2 with selected predictors
+We choose the highly significant variables as outputted by Negative Binomial Model 1:
+
+* VolatileAcidity
+* Chlorides
+* FreeSulfurDioxide
+* TotalSulfurDioxide
+* Sulphates
+* Alcohol
+* LabelAppeal
+* AcidIndex
+* STARS
+
+
+```{r}
+Negative_Bin_Model2 <- glm.nb(TARGET~ VolatileAcidity + Chlorides + FreeSulfurDioxide + TotalSulfurDioxide + Sulphates 
+              + 
+              Alcohol + 
+              as.factor(LabelAppeal) + 
+              as.factor(AcidIndex) + 
+              as.factor(STARS),
+              data=wine.train)
+summary(Negative_Bin_Model2)
+
+```
+Looking into the AIC value, we can say that Negative Bionomial Model 1 is better than Model 2.
+
+
+## Quasi Poisson regression model1
+
+Since the dataset indicates under-dispersion it is a good idea to fit Quasi Poisson regression model and check whether we see any difference in the Std Error estimation for the model regression coefficients.
+
+
+```{r}
+Quasi_Poisson_Model1<- glm(TARGET ~ FixedAcidity + VolatileAcidity + CitricAcid + ResidualSugar + 
+              Chlorides + FreeSulfurDioxide + TotalSulfurDioxide + Density +
+              pH + Sulphates + Alcohol + 
+              as.factor(LabelAppeal) +
+              as.factor(AcidIndex) +
+              as.factor(STARS),
+              data=wine.train, 
+              family=quasipoisson
+            )
+summary(Quasi_Poisson_Model1)
+
+ 
+```
+
+## Quasi Poisson Regression Model 2
+
+```{r}
+Quasi_Poisson_Model2 <- glm(TARGET ~ VolatileAcidity + Chlorides + FreeSulfurDioxide + TotalSulfurDioxide + Sulphates +Alcohol + 
+              as.factor(LabelAppeal) + 
+              as.factor(AcidIndex) + 
+              as.factor(STARS),
+              data=wine.train, 
+              family=quasipoisson
+             )
+summary(Quasi_Poisson_Model2)
+
+```
+
+## Compare Negative Binomial, Poisson Regression, and Quasi Poisson Regression models: Coefficients and Std Errors
+
+
+```{r}
+pois.coef = coef(Poisson_Model2)
+negbinom.coef = coef(Negative_Bin_Model2)
+pois.stderr = se.coef(Poisson_Model2)
+negbinom.stderr = summary(Negative_Bin_Model2)$coefficients[, 2]
+pois.quasi.coef = coef(Quasi_Poisson_Model2)
+pois.quasi.stderr = se.coef(Quasi_Poisson_Model2)
+df.analysis = cbind(pois.coef,   negbinom.coef,   pois.quasi.coef, 
+                    pois.stderr, negbinom.stderr, pois.quasi.stderr)
+head(df.analysis,10) %>% kable() %>% kable_styling(c("striped", "bordered"))
+
+
+```
+From the above table we can see that model coefficients and std errors for Poisson and Negative Binomial regression models are the same (up to 4 decimal places.)
+This can be due to the fact that under-dispersion in the dataset is not severe enough to impact the accuracy of the Poisson regression model.
+
+From the above table we can see that model coefficients for Poisson Regression and Quasi Poisson Regression models are same, but the estimates for Std Errors are different.
+
+This is expected since the dataset has under-dispersion.
+Std Error estimations for regression coefficients of the Poisson regression model will not be accurate.
+We need to rely on Std Error estimates from the Quasi Poisson regression model, which is better suited for datasets exhibiting under-dispersion or over-dispersion.
+
+If we need to use these coefficients for inference, it is better to rely on Std Error estimates from the Quasi Poisson regression model to calculate the confidence intervals, rather than from the normal Poisson regression model, for better accuracy of inference.
+
+
+
+```{r}
+#remotes::install_github('rstudio/tinytex')
+#install.packages('tinytex')
+#install.packages("remotes")
+
+```
+
+
