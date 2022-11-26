@@ -13,16 +13,14 @@ Given a set of metrics describing the quality of different wines, can we predict
 
 # Data Exploration
 
-
-```{r, echo=FALSE}
+```{r, include=FALSE}
 library(corrplot)
 library(reshape2)
 library(MASS)
 library(tidyverse)
 library(ggplot2)
+library(ggfortify)
 library(ggthemes)
-library(corrplot)
-library(reshape2)
 library(knitr)
 library(broom)
 library(caret)
@@ -37,8 +35,6 @@ library(arm)
 library(AER)
 #install.packages("kableExtra", repo="http://cran.r-project.org", dep=T)
 library(kableExtra)
-
-
 ```
 
 
@@ -91,37 +87,51 @@ ggplot(wine.train, aes(STARS, TARGET)) + geom_jitter(width=0.5, height=0.5)
 ### Correlation plot
 
 ```{r}
-#colnames(wine.train)[1] <- "INDEX"
-#corrplot(cor(select(wine.train, -"INDEX"), use = "complete.obs"), tl.col="black", tl.cex=0.6, order='AOE')
+colnames(wine.train)[1] <- "INDEX"
+corrplot(cor(select(wine.train, -"INDEX"), use = "complete.obs"), tl.col="black", tl.cex=0.6, order='AOE')
 ```
 
 
 * There is a positive correlation between `STARS` `LabelAppeal`, and `TARGET`. This makes sense because the better a wine label appears, the more likely a customer will buy the wine. And if an expert rates a wine highly, it is indicative that other people will like it is as well and decide to buy it.
 * There is a slight negative correlation between `AcidIndex` and `TARGET`, and it is interesting that this does not appear to be the case for `pH` and `TARGET`. Since pH is also a metric for acidity, we might have expected a relationship to exist.
 
-### Distribution of variables
+### Distribution of Variables
+
+Histograms of Distributions of Predictors & Target
+```{r, warning=FALSE, message=FALSE}
+mlt.train = wine.train 
+mlt.train = melt(mlt.train, id.vars = "INDEX")
+
+ggplot(aes(value), data = mlt.train) + geom_histogram(stat = "bin", fill = "navyblue") + facet_wrap(~variable, scales = "free") + labs(title = "Distributions of Continuous Variables", x = "Variable", y = "Count") 
+```
+
+Note that `TARGET` contains many 0 values. This means that many of the wines have 0 sales. 
+```{r}
+sum(wine.train %>% select("TARGET") == 0) / nrow(wine.train)
+```
+Upon further inspection, we determine that 21% of the wines have 0 sales. We will explore how much the frequency of zeroes in `TARGET` affects our models later.
+
+
+Scatterplots of Target vs Predictors
 
 ```{r, fig.height= 10, fig.width = 14}
 mlt.train <- melt(wine.train, id.vars = c("INDEX", "TARGET"))
 ggplot(aes(value, TARGET), data = mlt.train) + geom_point() + facet_wrap(~variable, scales = "free") + labs(title = "Distributions of Continuous Variables", x = "Variable", y = "TARGET") 
 ```
 
-For the `AcidIndex`, `STARS`, and `LabelAppeal` predictors, due to the small range of both them and the target variable, it may be easier to see their relationships if the data is jittered. Also, is there a differene between `pH` and `AcidIndex`?
+For the `AcidIndex`, `STARS`, and `LabelAppeal` predictors, due to the small range of both them and the target variable, it may be easier to see their relationships if the data is jittered. Also, is there a difference between `pH` and `AcidIndex`?
 
-
-```{r, fig.width = 7}
+```{r, warning=FALSE, fig.width = 7}
 # ggplot(wine.train, aes(AcidIndex, TARGET)) +
 #   geom_jitter(width = 0.5, height = 0.5)
 mlt.train <- melt(select(wine.train, "pH", "AcidIndex", "LabelAppeal", "STARS", "TARGET"), id.vars = c("TARGET"))
-ggplot(aes(value, TARGET), data = mlt.train) + geom_jitter(width = 0.5, height = 0.5) + facet_wrap(~variable, scales = "free") + labs(title = "Distributions of Continuous Variables Subset", x = "Variable", y = "TARGET") 
+ggplot(aes(value, TARGET), data = mlt.train) + geom_jitter(width = 0.5, height = 0.5) + facet_wrap(~variable, scales = "free") + labs(title = "Distributions of Continuous Variables Subset, Jittered", x = "Variable", y = "TARGET") 
 ```
 
 
 * There is a clear positive relationship between `LabelAppeal`, `STARS`, and `TARGET`.
 * The `AcidIndex` plot reveals that most of the wines have a lower total acidity, between 5 and 10.
 * The pH of most of the wine samples are also low, between 2 and 5.
-
-``
 
 # Build Models
 
@@ -173,8 +183,6 @@ In each model, the scores are very close to 1, which is good.
 
 Model 1
 ```{r}
-#install.packages("ggfortify")
-library(ggfortify)
 autoplot(mod1)
 ```
 
@@ -184,8 +192,7 @@ autoplot(mod1)
 ```{r}
 autoplot(mod2)
 ```
-
-Despite the decent VIF metrics, there is overall evidence that a mulitple linear regression is not the right fit for this data.
+Despite the decent VIF metrics, there is overall evidence that a multiple linear regression is not the right fit for this data.
 
 ## Poisson Model 1 with all predictor
 
@@ -362,3 +369,59 @@ If we need to use these coefficients for inference, it is better to rely on Std 
 ```
 
 
+### Consider Zero-Inflation
+
+Previously, we determined that 21% of the wines have 0 sales. Also, over 25% of the wines have not been rated by an expert, indicated by `STARS`. Is there a relationship? Of the predictors with missing values, we can visualize the relationship between them and the number of sales. Recall that the number of sales amongst all the wines ranged from 0-8.
+
+
+```{r}
+predictor_names <- colnames(wine.train %>% select(c("ResidualSugar","Chlorides","FreeSulfurDioxide",
+                                                     "TotalSulfurDioxide","pH","Sulphates","Alcohol","STARS")))
+
+missing_val <- data.frame(INDEX=NA, Variable=NA, value=NA)
+colnames(missing_val) <- c("INDEX", "Variable", "value")
+
+for (name in predictor_names) {
+  
+  #new_missing <- data.frame(cbind(rep(name,5), wine.train %>% filter(is.na(wine.train[name])) %>% count(STARS)))
+  missing_stars_count <- wine.train %>% filter(is.na(wine.train[name])) %>% count(TARGET)
+  new_missing <- data.frame(cbind(rep(name,nrow(missing_stars_count)), missing_stars_count))
+  colnames(new_missing) <- c("INDEX", "Variable", "value")
+  
+  missing_val <-  rbind(missing_val, new_missing)
+}
+
+# drop first row of NAs
+missing_val <- missing_val %>%
+  filter(!row_number() %in% c(1))
+
+ggplot(data=missing_val) + geom_bar(mapping=aes(x=Variable, y=value), stat="identity") + facet_wrap(~INDEX, scales = "fixed") + labs(title = "Missing Predictors vs Sales", x = "Num sales", y = "Count")  
+```
+
+The bar at 0 in the `STARS` plot stands out as the largest. It indicates that about 2000 wines without experts' ratings had no sales. It is much more than any other predictor. There is a clear relationship between the number of wines that don't have an expert's rating and the number of sales. When there is no rating, no wine is sold. 
+
+Since there is a large number of 0 sales that is likely related to the `STARS` predictor, we can build a zero-inflated negative binomial model. A zero-inflated model assumes that a zero outcome is due to two different processes. For this model, it assumes that if there is no expert rating, then a zero is produced. If there is an expert rating, then the count portion of the model will be used instead. Since the other portion has only 2 outcomes, we can use the negative binomial model. In other words, the overall model is a combination of two models. 
+
+Here, the model will take the `STARS` predictor for the negative binomial portion, and all of the predictors in the count portion.
+
+```{r}
+ZInflatedModel <- zeroinfl(TARGET ~ FixedAcidity + VolatileAcidity + CitricAcid + 
+    ResidualSugar + Chlorides + FreeSulfurDioxide + TotalSulfurDioxide + 
+    Density + pH + Sulphates + Alcohol + as.factor(LabelAppeal) + 
+    as.factor(AcidIndex)  | STARS,
+  data = wine.train, dist = "negbin")
+summary(ZInflatedModel)
+```
+
+
+The `STARS` predictor is statistically significant, as well as `VolatileAcidity`, `Alcohol`, and `LabelAppeal`. A simpler model with these predictors can be built.
+
+
+```{r}
+ZInflatedModel2 <- zeroinfl(TARGET ~ VolatileAcidity + 
+    Alcohol + as.factor(LabelAppeal)  | STARS,
+  data = wine.train, dist = "negbin")
+summary(ZInflatedModel2)
+```
+
+One takeaway from the model output is the log odds of the number of sales, `TARGET`, being an excessive zero would decrease by 3.7 for every additional unit increase in the expert rating. In other words, the higher the expert rating, the more likely that the wine had at least one sale.
