@@ -425,3 +425,50 @@ summary(ZInflatedModel2)
 ```
 
 One takeaway from the model output is the log odds of the number of sales, `TARGET`, being an excessive zero would decrease by 3.7 for every additional unit increase in the expert rating. In other words, the higher the expert rating, the more likely that the wine had at least one sale.
+
+
+
+## Predictions
+
+Does the evaluation set have characteristics to the training set?
+
+```{r}
+(colSums(is.na(wine.eval)) / nrow(wine.eval)) * 100
+```
+
+
+Similar to the training set, over 25% of the wines don't have a value for `STARS`. Now that we have revealed the relationship between the absence of an expert's rating and 0 sales, we decide to use the simpler zero-inflated negative binomial model.
+
+
+The evaluation data set is prepared prior.
+
+```{r}
+colnames(wine.eval)[1] <- "INDEX"
+```
+
+```{r}
+wine.eval$TARGET <- round(predict(ZInflatedModel2, wine.eval %>% select(-c("INDEX", "TARGET")), type="response"))
+head(wine.eval)
+```
+
+We notice that there are many NAs for `TARGET`. How many are owed to NAs in `STARS`?
+
+```{r}
+wine.eval %>% filter(is.na(STARS) && is.na(TARGET)) %>% count()
+```
+
+```{r}
+wine.eval %>% filter(is.na(STARS) && !is.na(TARGET)) %>% count()
+```
+
+Every NA in `TARGET` is an effect of an NA in `STARS`. As seen in the training set, the number of sales for wines without an expert rating is overwhelmingly zero. We can add these zeroes in place of the NAs in `TARGET`.
+
+```{r}
+wine.eval[is.na(wine.eval$TARGET), 'TARGET'] <- 0
+```
+
+
+```{r}
+write_csv(wine.eval,"HW5_predictions.csv")
+```
+
