@@ -13,7 +13,6 @@ Given a set of metrics describing the quality of different wines, can we predict
 
 # Data Exploration
 
-
 ```{r, include=FALSE}
 library(corrplot)
 library(reshape2)
@@ -36,8 +35,6 @@ library(arm)
 library(AER)
 #install.packages("kableExtra", repo="http://cran.r-project.org", dep=T)
 library(kableExtra)
-
-
 ```
 
 
@@ -91,7 +88,7 @@ ggplot(wine.train, aes(STARS, TARGET)) + geom_jitter(width=0.5, height=0.5)
 
 ```{r}
 colnames(wine.train)[1] <- "INDEX"
-#corrplot(cor(select(wine.train, -"INDEX"), use = "complete.obs"), tl.col="black", tl.cex=0.6, order='AOE')
+corrplot(cor(select(wine.train, -"INDEX"), use = "complete.obs"), tl.col="black", tl.cex=0.6, order='AOE')
 ```
 
 
@@ -116,13 +113,13 @@ Upon further inspection, we determine that 21% of the wines have 0 sales. We wil
 
 
 Scatterplots of Target vs Predictors
+
 ```{r, fig.height= 10, fig.width = 14}
 mlt.train <- melt(wine.train, id.vars = c("INDEX", "TARGET"))
 ggplot(aes(value, TARGET), data = mlt.train) + geom_point() + facet_wrap(~variable, scales = "free") + labs(title = "Distributions of Continuous Variables", x = "Variable", y = "TARGET") 
 ```
 
 For the `AcidIndex`, `STARS`, and `LabelAppeal` predictors, due to the small range of both them and the target variable, it may be easier to see their relationships if the data is jittered. Also, is there a difference between `pH` and `AcidIndex`?
-
 
 ```{r, warning=FALSE, fig.width = 7}
 # ggplot(wine.train, aes(AcidIndex, TARGET)) +
@@ -135,8 +132,6 @@ ggplot(aes(value, TARGET), data = mlt.train) + geom_jitter(width = 0.5, height =
 * There is a clear positive relationship between `LabelAppeal`, `STARS`, and `TARGET`.
 * The `AcidIndex` plot reveals that most of the wines have a lower total acidity, between 5 and 10.
 * The pH of most of the wine samples are also low, between 2 and 5.
-
-
 
 # Build Models
 
@@ -197,7 +192,6 @@ autoplot(mod1)
 ```{r}
 autoplot(mod2)
 ```
-
 Despite the decent VIF metrics, there is overall evidence that a multiple linear regression is not the right fit for this data.
 
 ## Poisson Model 1 with all predictor
@@ -431,23 +425,3 @@ summary(ZInflatedModel2)
 ```
 
 One takeaway from the model output is the log odds of the number of sales, `TARGET`, being an excessive zero would decrease by 3.7 for every additional unit increase in the expert rating. In other words, the higher the expert rating, the more likely that the wine had at least one sale.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
